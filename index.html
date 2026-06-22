@@ -2,14 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Roshan's Room — Interactive Plan</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
-  body { background: radial-gradient(circle at 50% 25%, #20232f 0%, #11121a 75%); color: #eef0f4; }
-  #app { position: fixed; inset: 0; }
-  canvas { display: block; }
+  body { background: radial-gradient(circle at 50% 25%, #20232f 0%, #11121a 75%); color: #eef0f4;
+         overscroll-behavior: none; touch-action: none; -webkit-text-size-adjust: 100%; }
+  #app { position: fixed; inset: 0; touch-action: none; }
+  canvas { display: block; touch-action: none; }
 
   /* labels floating in 3D */
   .lbl {
@@ -35,7 +36,8 @@
 
   #toolbar {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 20;
-    display: flex; gap: 8px; background: rgba(18,19,27,.8); backdrop-filter: blur(10px);
+    display: flex; flex-wrap: wrap; gap: 8px; max-width: 94vw; justify-content: center;
+    background: rgba(18,19,27,.8); backdrop-filter: blur(10px);
     border: 1px solid rgba(255,255,255,.1); padding: 8px; border-radius: 14px;
   }
   #toolbar button {
@@ -45,6 +47,21 @@
   }
   #toolbar button:hover { background: rgba(255,255,255,.14); }
   #hint { position: fixed; bottom: 16px; right: 16px; z-index: 20; font-size: 11px; opacity:.45; text-align:right; }
+
+  /* collapsible panel + mobile tuning */
+  .panelHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #panelToggle { display:none; font:inherit; font-size:15px; color:#eef0f4; cursor:pointer;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14);
+    width:30px; height:30px; min-width:30px; border-radius:8px; line-height:1; padding:0; }
+  #panel.collapsed #panelBody { display:none; }
+  @media (max-width: 760px), (pointer: coarse) {
+    #panel { width: min(70vw, 235px); top: calc(8px + env(safe-area-inset-top)); left: 10px; padding: 10px 12px; font-size: 12px; }
+    #panelToggle { display:inline-flex; align-items:center; justify-content:center; }
+    #toolbar { gap: 6px; bottom: calc(8px + env(safe-area-inset-bottom)); padding: 6px; }
+    #toolbar button { padding: 9px 11px; font-size: 12px; }
+    #hint { display:none; }
+    .lbl { font-size: 11px; padding: 1px 5px; }
+  }
 </style>
 <script type="importmap">
 { "imports": {
@@ -57,7 +74,8 @@
 <div id="app"></div>
 
 <div id="panel">
-  <h1>Roshan's Room</h1>
+  <div class="panelHead"><h1>Roshan's Room</h1><button id="panelToggle" aria-label="Toggle details">▾</button></div>
+  <div id="panelBody">
   <div class="sub">Interior 302 × 215 cm · height 225 cm · drawn to scale</div>
 
   <h2>Room</h2>
@@ -93,6 +111,7 @@
   <h2>Wall unit (left wall)</h2>
   <div class="row"><span>Length × depth</span><span>162 × 40 cm</span></div>
   <div class="row"><span>Height range</span><span>170 – 210 cm</span></div>
+  </div>
 </div>
 
 <div id="toolbar">
@@ -328,6 +347,14 @@ document.getElementById('iso').onclick   = () => moveTo(ISO);
 document.getElementById('top').onclick   = () => moveTo(new THREE.Vector3(cx+0.001, cy+7.5, cz));
 function moveTo(pos){ camera.position.copy(pos); controls.target.set(cx, cy*0.7, cz); controls.update(); }
 
+// ---- collapsible info panel + mobile defaults
+const panel = document.getElementById('panel');
+document.getElementById('panelToggle').onclick = () => panel.classList.toggle('collapsed');
+if (matchMedia('(max-width: 760px)').matches || matchMedia('(pointer: coarse)').matches) {
+  panel.classList.add('collapsed');                       // phones start collapsed (title only)
+  labelsOn = false; labels.forEach(l => l.element.style.display = 'none'); tLabels.textContent = 'Labels: off';
+}
+
 // per-frame wall handling (dollhouse auto-hide) — uses true world positions so it survives the mirror
 function updateWalls(){
   for(const {g,m} of wallGroups){
@@ -380,6 +407,7 @@ window.addEventListener('pointermove', e => {
     }
     return;
   }
+  if (e.pointerType && e.pointerType !== 'mouse') return; // hover cursor is mouse-only (skip on touch)
   setRay(e);                                             // hover cursor hint
   el.style.cursor = hits([doorLeaf, doorHandle]) ? 'grab'
                   : (hits(bedParts) || (underbedOut && hits(ubParts))) ? 'pointer' : '';
