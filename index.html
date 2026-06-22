@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Roshan's Room — Interactive Plan</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+  body { background: radial-gradient(circle at 50% 25%, #20232f 0%, #11121a 75%); color: #eef0f4; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* labels floating in 3D */
+  .lbl {
+    font-size: 12px; font-weight: 600; color: #1b1d24;
+    background: rgba(255,255,255,.88); border: 1px solid rgba(0,0,0,.12);
+    padding: 2px 7px; border-radius: 6px; white-space: nowrap;
+    pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  }
+  .lbl.dim { color: #b23a36; background: rgba(255,255,255,.92); }
+
+  #panel {
+    position: fixed; top: 16px; left: 16px; z-index: 20; width: 268px;
+    background: rgba(18,19,27,.82); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 14px 16px;
+    font-size: 12.5px; line-height: 1.5; max-height: calc(100vh - 32px); overflow:auto;
+  }
+  #panel h1 { font-size: 16px; margin-bottom: 2px; }
+  #panel .sub { font-size: 11px; opacity:.6; margin-bottom: 10px; }
+  #panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing:.06em; opacity:.55; margin: 12px 0 4px; }
+  #panel .row { display:flex; justify-content:space-between; gap:10px; }
+  #panel .row span:last-child { color:#9fd0ff; font-variant-numeric: tabular-nums; white-space:nowrap; }
+  #panel .tbd { color:#ffcf8a; }
+
+  #toolbar {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 20;
+    display: flex; gap: 8px; background: rgba(18,19,27,.8); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.1); padding: 8px; border-radius: 14px;
+  }
+  #toolbar button {
+    font: inherit; font-size: 13px; color: #eef0f4; cursor: pointer;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+    padding: 7px 13px; border-radius: 9px;
+  }
+  #toolbar button:hover { background: rgba(255,255,255,.14); }
+  #hint { position: fixed; bottom: 16px; right: 16px; z-index: 20; font-size: 11px; opacity:.45; text-align:right; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="panel">
+  <h1>Roshan's Room</h1>
+  <div class="sub">Interior 302 × 215 cm · height 225 cm · drawn to scale</div>
+
+  <h2>Room</h2>
+  <div class="row"><span>Length</span><span>302 cm</span></div>
+  <div class="row"><span>Width</span><span>215 cm</span></div>
+  <div class="row"><span>Height</span><span>225 cm</span></div>
+
+  <h2>Door (front wall)</h2>
+  <div class="row"><span>Width</span><span>90 cm</span></div>
+  <div class="row"><span>Position</span><span>front-left, opens in</span></div>
+
+  <h2>Main window (back wall)</h2>
+  <div class="row"><span>Width</span><span>193 cm</span></div>
+  <div class="row"><span>Gap at right</span><span>22 cm</span></div>
+  <div class="row"><span>Sill height</span><span>85 cm</span></div>
+
+  <h2>Radiator (back wall)</h2>
+  <div class="row"><span>Offset from left</span><span>22 cm</span></div>
+  <div class="row"><span>Width</span><span>72 cm</span></div>
+
+  <h2>Side window (right wall)</h2>
+  <div class="row"><span>Offset from front</span><span>103 cm</span></div>
+  <div class="row"><span>Width</span><span>70 cm</span></div>
+  <div class="row"><span>Sill height</span><span>85 cm</span></div>
+
+  <h2>Bed — SLÄKT</h2>
+  <div class="row"><span>Frame</span><span>206 × 98 cm</span></div>
+  <div class="row"><span>Footboard / headboard</span><span>58 / 80 cm</span></div>
+  <div class="row"><span>Underbed pulled out</span><span>193 cm wide</span></div>
+  <div class="row"><span>Gap to opposite wall</span><span>22 cm</span></div>
+  <div class="row"><span>Mattress ×2 (90×200)</span><span class="tbd">to decide</span></div>
+
+  <h2>Wall unit (left wall)</h2>
+  <div class="row"><span>Length × depth</span><span>162 × 40 cm</span></div>
+  <div class="row"><span>Height range</span><span>170 – 210 cm</span></div>
+</div>
+
+<div id="toolbar">
+  <button id="reset">Reset view</button>
+  <button id="iso">Isometric</button>
+  <button id="top">Top-down</button>
+  <button id="walls">Walls: Auto</button>
+  <button id="dims">Dims: on</button>
+  <button id="underbed">Underbed: out</button>
+  <button id="labels">Labels: on</button>
+</div>
+<div id="hint">drag = orbit · scroll = zoom · right-drag = pan<br>drag the door handle to open it · click bed = roll underbed out · click underbed = stow it</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const M = 0.01;                       // cm -> metres
+const RW = 215, RL = 302, RH = 225;   // width(x), length(z), height(y)  [cm]
+const cx = RW/2*M, cy = RH/2*M, cz = RL/2*M;   // room centre (m)
+
+const app = document.getElementById('app');
+const scene = new THREE.Scene();
+// MIRROR the whole room left<->right about its own centre (stays in place)
+scene.scale.x = -1;
+scene.position.x = 2 * cx;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+app.appendChild(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.domElement.style.position = 'fixed';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+app.appendChild(labelRenderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.05, 100);
+// front-RIGHT-above: looks in from the door side, left + back walls stay solid
+const ISO = new THREE.Vector3(cx+3.6, cy+3.2, -2.9);
+camera.position.copy(ISO);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(cx, cy*0.7, cz);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.maxDistance = 14; controls.minDistance = 1.5;
+controls.maxPolarAngle = Math.PI/2.02;
+controls.update();
+
+// lights
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a93a6, 0.85));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sun = new THREE.DirectionalLight(0xfff3e0, 1.0);
+sun.position.set(cx-3, cy+5, cz+2); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.radius = 5;
+Object.assign(sun.shadow.camera, { left:-4, right:4, top:4, bottom:-4, near:0.5, far:20 });
+scene.add(sun);
+
+// ---- material helpers
+const mat = (c, o={}) => new THREE.MeshStandardMaterial({ color:c, roughness:0.9, metalness:0, side:THREE.DoubleSide, ...o });
+const wallMat  = () => new THREE.MeshStandardMaterial({ color:0xeceef2, roughness:1, side:THREE.DoubleSide, transparent:true, opacity:1 });
+const glassMat = () => mat(0x88b7e2, { transparent:true, opacity:0.42, roughness:0.2, side:THREE.DoubleSide });
+const frameMat = () => mat(0xffffff, { roughness:0.7 });
+
+// box from cm extents (centre-positioned)
+function box(x0,x1,y0,y1,z0,z1, material, parent=scene, shadow=true){
+  const w=(x1-x0)*M, h=(y1-y0)*M, d=(z1-z0)*M;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w,1e-4),Math.max(h,1e-4),Math.max(d,1e-4)), material);
+  m.position.set((x0+x1)/2*M,(y0+y1)/2*M,(z0+z1)/2*M);
+  m.castShadow = shadow; m.receiveShadow = true; parent.add(m);
+  return m;
+}
+// flat panel on a wall (window/glass), thin in given axis
+function panel(x0,x1,y0,y1,z0,z1, material, parent){ return box(x0,x1,y0,y1,z0,z1, material, parent, false); }
+
+// ---- floor + grid
+const floor = box(0,RW, -1,0, 0,RL, mat(0xe6e8ec,{roughness:1}));
+const grid = new THREE.GridHelper(Math.max(RW,RL)*M, Math.round(Math.max(RW,RL)/50), 0xbfc4cc, 0xd2d6dd);
+grid.position.set(cx, 0.001, cz); scene.add(grid);
+
+// ---- WALLS (groups so features hide with their wall)
+const backWall  = new THREE.Group(); scene.add(backWall);
+const frontWall = new THREE.Group(); scene.add(frontWall);
+const leftWall  = new THREE.Group(); scene.add(leftWall);
+const rightWall = new THREE.Group(); scene.add(rightWall);
+const T = 4;   // wall thickness (cm) for visual
+const backWallMesh  = box(0,RW, 0,RH, RL,RL+T, wallMat(), backWall);   // back (z=RL)
+const frontWallMesh = box(0,RW, 0,RH, -T,0,    wallMat(), frontWall);  // front (z=0)
+const leftWallMesh  = box(-T,0, 0,RH, 0,RL,    wallMat(), leftWall);   // left (x=0)
+const rightWallMesh = box(RW,RW+T, 0,RH, 0,RL, wallMat(), rightWall);  // right (x=RW)
+
+// main window + gap on back wall (slightly inside so it reads)
+panel(0,193, 85,205, RL-1,RL, frameMat(), backWall);
+panel(3,190, 88,202, RL-1.4,RL-0.6, glassMat(), backWall);
+panel(95,98, 88,202, RL-1.6,RL-0.4, frameMat(), backWall);
+// window ledge (2 cm into room)
+box(0,193, 84,86, RL-2,RL, frameMat(), backWall, false);
+// radiator on back wall (22..94), shallow
+box(22,94, 8,72, RL-6,RL, mat(0xccd1d9,{roughness:1}), backWall);
+
+// side window on right wall
+panel(RW-1,RW, 85,205, 103,173, frameMat(), rightWall);
+panel(RW-1.4,RW-0.6, 88,202, 106,170, glassMat(), rightWall);
+box(RW-2,RW, 84,86, 103,173, frameMat(), rightWall, false);
+
+// ---- DOOR: hinged leaf you can DRAG open/closed (hinge at the front-left corner, on the front wall)
+const doorMat = mat(0xb98a5e, { roughness:0.8 });
+const doorPivot = new THREE.Group(); scene.add(doorPivot);             // pivot at the hinge (room corner 0,0)
+const doorLeaf = box(0,90, 0,205, 0,5, doorMat, doorPivot);            // leaf; closed (rot 0) = in front wall
+const doorHandle = box(78,86, 96,108, 5,11, mat(0x5f4a34), doorPivot); // handle near free edge — drag this
+
+// ---- BED (left wall, headboard at back over radiator, runs forward under wall unit)
+const BX0=0, BX1=98, BZ0=RL-206, BZ1=RL;        // frame 98 wide, 206 long (head at back z=RL)
+const bedParts = [
+  box(BX0,BX1, 0,48, BZ0,BZ1-6, mat(0xbcc4d2)),              // base
+  box(BX0,BX1-2, 48,58, BZ0+2,BZ1-8, mat(0xf2f5f9)),        // mattress (top 58 = footboard height)
+  box(BX0,BX1, 0,80, BZ1-6,BZ1, mat(0x9aa6b6)),             // headboard (80 cm, against radiator)
+  box(BX0+8,BX1-10, 58,72, BZ1-30,BZ1-10, mat(0xfafbfc)),   // pillow
+];
+
+// ---- WALL UNIT (left wall, 162 long, 40 deep, 170..210 high)
+box(0,40, 170,210, 110,272, mat(0xcdc4b0,{roughness:0.85}));
+
+// ---- PULL-OUT UNDERBED (SLÄKT) — shown pulled out into the room from the bed's open long side
+const underbed = new THREE.Group(); scene.add(underbed);
+// pulled out, bed + underbed span 193 cm total (IKEA "bed width 193"); underbed mattress 90x200, max 10 cm
+const ubParts = [
+  box(98,193, 0,24, 100,300, mat(0xc4ccd8), underbed),     // pull-out base, far edge at x=193
+  box(101,191, 24,32, 103,297, mat(0xeceff4), underbed),   // its mattress (90 wide, lower level)
+];
+
+// ===================== DIMENSIONS (red 3D arrows) =====================
+const dimGroup = new THREE.Group(); scene.add(dimGroup);
+const dimLabels = [];
+const RED = 0xd23a30;
+const dimLineMat = new THREE.LineBasicMaterial({ color: RED });
+const extLineMat = new THREE.LineBasicMaterial({ color: 0xe79490 });
+const va = p => new THREE.Vector3(p[0]*M, p[1]*M, p[2]*M);
+function dimCone(at, dir, parent){
+  const c = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 12), new THREE.MeshBasicMaterial({ color: RED, side: THREE.DoubleSide }));
+  c.position.copy(at); c.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+  parent.add(c);
+}
+function dim3d(p0, p1, off, txt, parent=dimGroup){
+  const a = va([p0[0]+off[0], p0[1]+off[1], p0[2]+off[2]]);
+  const b = va([p1[0]+off[0], p1[1]+off[1], p1[2]+off[2]]);
+  parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([va(p0), a]), extLineMat));
+  parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([va(p1), b]), extLineMat));
+  parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), dimLineMat));
+  dimCone(a, a.clone().sub(b), parent); dimCone(b, b.clone().sub(a), parent);
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  const el = document.createElement('div'); el.className = 'lbl dim'; el.textContent = txt;
+  const o = new CSS2DObject(el); o.position.copy(mid); parent.add(o); dimLabels.push(o);
+}
+// room shell
+dim3d([0,0,0],[RW,0,0],[0,0,-28], "215 cm");                 // width  (front floor edge)
+dim3d([RW,0,0],[RW,0,RL],[34,0,0], "302 cm");                // length (right floor edge)
+dim3d([RW,0,0],[RW,RH,0],[34,0,-28], "225 cm");              // height (front-right corner)
+// door
+dim3d([0,0,0],[90,0,0],[0,0,-12], "Door 90");
+// main window + gap (back wall, above window)
+dim3d([0,205,RL],[193,205,RL],[0,20,0], "Main window 193");
+dim3d([193,205,RL],[RW,205,RL],[0,20,0], "Gap 22");
+// radiator (back wall, just above the headboard)
+dim3d([0,82,RL-1],[22,82,RL-1],[0,12,0], "22");
+dim3d([22,82,RL-1],[94,82,RL-1],[0,12,0], "Radiator 72");
+// side window (right wall, above window)
+dim3d([RW,205,0],[RW,205,103],[14,0,0], "103");
+dim3d([RW,205,103],[RW,205,173],[14,0,0], "Side window 70");
+// sill height (right wall, window front edge)
+dim3d([RW,0,103],[RW,85,103],[12,0,0], "Sill 85");
+// bed + underbed widths + gap to opposite wall (chained across room width, in front of the bed)
+dim3d([0,0,96],[98,0,96],[0,0,-30], "Bed 98");
+dim3d([98,0,96],[193,0,96],[0,0,-30], "Underbed 95", underbed);   // shows only when underbed is out
+dim3d([193,0,96],[RW,0,96],[0,0,-30], "Gap 22", underbed);
+// WALL UNIT — full red dimensions on the unit itself
+dim3d([40,170,110],[40,170,272],[18,0,0], "Unit 162");      // length along the wall
+dim3d([0,210,110],[40,210,110],[0,18,0], "40 deep");        // depth into room
+dim3d([40,0,110],[40,170,110],[0,0,-34], "170");            // floor -> underside
+dim3d([40,170,110],[40,210,110],[0,0,-34], "40 tall");      // unit height
+
+// ===================== LABELS (CSS2D) =====================
+const labels = [];
+function label(text, x,y,z, cls='lbl'){
+  const el = document.createElement('div'); el.className = cls; el.textContent = text;
+  const o = new CSS2DObject(el); o.position.set(x*M,y*M,z*M); scene.add(o); labels.push(o); return o;
+}
+// furniture names only — dimensions are shown by the red dim arrows
+label('Bed  207 × 96', 48, 80, 200);
+label('Wall unit', 20, 215, 191);
+label('Main window', 130, 150, RL);
+label('Side window', RW, 150, 138);
+const underbedLabel = label('Pull-out underbed', 135, 48, 196);
+
+// ===================== UI =====================
+let wallsMode = 'auto';     // auto | glass | off
+const wallGroups = [
+  { g: backWall,  m: backWallMesh },
+  { g: frontWall, m: frontWallMesh },
+  { g: leftWall,  m: leftWallMesh },
+  { g: rightWall, m: rightWallMesh },
+];
+const roomCenterW = new THREE.Vector3(cx, cy*0.5, cz);
+const _wp = new THREE.Vector3();
+const tWalls = document.getElementById('walls');
+tWalls.onclick = () => {
+  wallsMode = wallsMode==='auto' ? 'glass' : wallsMode==='glass' ? 'off' : 'auto';
+  tWalls.textContent = 'Walls: ' + (wallsMode==='auto'?'Auto':wallsMode==='glass'?'Glass':'Off');
+};
+let labelsOn = true;
+const tLabels = document.getElementById('labels');
+tLabels.onclick = () => { labelsOn=!labelsOn; tLabels.textContent='Labels: '+(labelsOn?'on':'off');
+  labels.forEach(l=>l.element.style.display = labelsOn?'':'none'); };
+
+let dimsOn = true;
+const tDims = document.getElementById('dims');
+tDims.onclick = () => { dimsOn=!dimsOn; tDims.textContent='Dims: '+(dimsOn?'on':'off');
+  dimGroup.visible = dimsOn; dimLabels.forEach(l=>l.element.style.display = dimsOn?'':'none'); };
+
+let underbedOut = true;
+const tUnder = document.getElementById('underbed');
+function setUnderbed(out){
+  underbedOut = out; underbed.visible = out;
+  tUnder.textContent = 'Underbed: ' + (out ? 'out' : 'in');
+  underbedLabel.element.style.display = (out && labelsOn) ? '' : 'none';
+}
+tUnder.onclick = () => setUnderbed(!underbedOut);
+
+document.getElementById('reset').onclick = () => moveTo(ISO);
+document.getElementById('iso').onclick   = () => moveTo(ISO);
+document.getElementById('top').onclick   = () => moveTo(new THREE.Vector3(cx+0.001, cy+7.5, cz));
+function moveTo(pos){ camera.position.copy(pos); controls.target.set(cx, cy*0.7, cz); controls.update(); }
+
+// per-frame wall handling (dollhouse auto-hide) — uses true world positions so it survives the mirror
+function updateWalls(){
+  for(const {g,m} of wallGroups){
+    m.getWorldPosition(_wp);
+    const camOutside = _wp.clone().sub(roomCenterW).dot(camera.position.clone().sub(_wp)) > 0;  // wall between camera & room
+    if(wallsMode==='off'){ g.visible = false; }
+    else if(wallsMode==='auto'){
+      g.visible = !camOutside;
+      if(g.visible) g.traverse(o=>{ if(o.isMesh && o.material.color && o.material.color.getHex()===0xeceef2) o.material.opacity = 1; });
+    }
+    else { // glass: all walls visible, the wall plane faint
+      g.visible = true;
+      g.traverse(o=>{
+        if(!o.isMesh) return;
+        o.visible = true;
+        if(o.material.color && o.material.color.getHex()===0xeceef2){ o.material.transparent=true; o.material.opacity=0.16; }
+      });
+    }
+  }
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight);
+});
+renderer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight);
+
+// ===================== INTERACTION (drag door, click bed/underbed) =====================
+const ray = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+const floorPlane = new THREE.Plane(new THREE.Vector3(0,1,0), -1.0);   // horizontal plane at y = 1.0 m
+const _hit = new THREE.Vector3();
+let dragDoor = false, downXY = null;
+const el = renderer.domElement;
+function setRay(e){ ptr.set((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1); ray.setFromCamera(ptr, camera); }
+function hits(objs){ return ray.intersectObjects(objs, false).length > 0; }
+
+el.addEventListener('pointerdown', e => {
+  setRay(e); downXY = { x:e.clientX, y:e.clientY };
+  if (hits([doorLeaf, doorHandle])) { dragDoor = true; controls.enabled = false; }
+});
+window.addEventListener('pointermove', e => {
+  if (dragDoor) {
+    setRay(e);
+    if (ray.ray.intersectPlane(floorPlane, _hit)) {
+      scene.worldToLocal(_hit);                          // -> clean (un-mirrored) room coords; hinge at (0,0)
+      let th = Math.atan2(_hit.z, _hit.x);               // 0 = closed (along front wall), grows opening inward
+      th = Math.max(0, Math.min(Math.PI*0.52, th));      // clamp 0..~94°
+      doorPivot.rotation.y = -th;
+    }
+    return;
+  }
+  setRay(e);                                             // hover cursor hint
+  el.style.cursor = hits([doorLeaf, doorHandle]) ? 'grab'
+                  : (hits(bedParts) || (underbedOut && hits(ubParts))) ? 'pointer' : '';
+});
+window.addEventListener('pointerup', e => {
+  if (dragDoor) { dragDoor = false; controls.enabled = true; return; }
+  const moved = downXY && (Math.abs(e.clientX-downXY.x) + Math.abs(e.clientY-downXY.y) > 6);
+  downXY = null;
+  if (moved) return;                                     // it was an orbit drag, not a click
+  setRay(e);
+  if (underbedOut && hits(ubParts)) setUnderbed(false);  // click underbed -> stow
+  else if (hits(bedParts)) setUnderbed(true);            // click bed -> roll underbed out
+});
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  updateWalls();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
