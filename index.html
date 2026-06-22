@@ -348,10 +348,10 @@ document.getElementById('top').onclick   = () => moveTo(new THREE.Vector3(cx+0.0
 function moveTo(pos){ camera.position.copy(pos); controls.target.set(cx, cy*0.7, cz); controls.update(); }
 
 // ---- collapsible info panel + mobile defaults
-const panel = document.getElementById('panel');
-document.getElementById('panelToggle').onclick = () => panel.classList.toggle('collapsed');
+const infoPanel = document.getElementById('panel');
+document.getElementById('panelToggle').onclick = () => infoPanel.classList.toggle('collapsed');
 if (matchMedia('(max-width: 760px)').matches || matchMedia('(pointer: coarse)').matches) {
-  panel.classList.add('collapsed');                       // phones start collapsed (title only)
+  infoPanel.classList.add('collapsed');                   // phones start collapsed (title only)
   labelsOn = false; labels.forEach(l => l.element.style.display = 'none'); tLabels.textContent = 'Labels: off';
 }
 
