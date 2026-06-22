@@ -101,12 +101,21 @@
   <div class="row"><span>Width</span><span>70 cm</span></div>
   <div class="row"><span>Sill height</span><span>85 cm</span></div>
 
-  <h2>Bed — SLÄKT</h2>
+  <h2>Bed — <span id="bedName">SLÄKT</span></h2>
+  <div id="slaktBedInfo">
   <div class="row"><span>Frame</span><span>206 × 98 cm</span></div>
   <div class="row"><span>Footboard / headboard</span><span>58 / 80 cm</span></div>
   <div class="row"><span>Underbed pulled out</span><span>193 cm wide</span></div>
   <div class="row"><span>Gap to opposite wall</span><span>22 cm</span></div>
   <div class="row"><span>Mattress ×2 (90×200)</span><span class="tbd">to decide</span></div>
+  </div>
+  <div id="busungeBedInfo" style="display:none">
+  <div class="row"><span>Frame width</span><span>90 cm</span></div>
+  <div class="row"><span>Length (extends)</span><span>138 – 208 cm</span></div>
+  <div class="row"><span>Headboard</span><span>100 cm</span></div>
+  <div class="row"><span>3 lengths</span><span>138 / 173 / 208</span></div>
+  <div class="row"><span>Mattress (80×200)</span><span class="tbd">to decide</span></div>
+  </div>
 
   <h2>Wall unit (left wall)</h2>
   <div class="row"><span>Length × depth</span><span>162 × 40 cm</span></div>
@@ -121,6 +130,7 @@
   <button id="walls">Walls: Auto</button>
   <button id="dims">Dims: on</button>
   <button id="underbed">Underbed: out</button>
+  <button id="bedkind">Bed: SLÄKT</button>
   <button id="labels">Labels: on</button>
 </div>
 <div id="hint">drag = orbit · scroll = zoom · right-drag = pan<br>drag the door handle to open it · click bed = roll underbed out · click underbed = stow it</div>
@@ -133,6 +143,18 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 const M = 0.01;                       // cm -> metres
 const RW = 215, RL = 302, RH = 225;   // width(x), length(z), height(y)  [cm]
 const cx = RW/2*M, cy = RH/2*M, cz = RL/2*M;   // room centre (m)
+
+// ---- UI state + label-visibility registry (CSS2DRenderer honours object.visible, NOT css display)
+let bedKind = 'slakt', underbedOut = true, labelsOn = true, dimsOn = true;
+const gAlways = () => true;
+const gSlakt = () => bedKind === 'slakt';
+const gUnderbed = () => bedKind === 'slakt' && underbedOut;
+const allLabels = [];
+function reg(o, kind, gate){ allLabels.push({ o, kind, gate }); return o; }
+function refreshLabels(){
+  for (const t of allLabels) t.o.visible = (t.kind === 'name' ? labelsOn : dimsOn) && t.gate();
+  syncBusungeLabels();
+}
 
 const app = document.getElementById('app');
 const scene = new THREE.Scene();
@@ -225,13 +247,14 @@ const doorPivot = new THREE.Group(); scene.add(doorPivot);             // pivot 
 const doorLeaf = box(0,90, 0,205, 0,5, doorMat, doorPivot);            // leaf; closed (rot 0) = in front wall
 const doorHandle = box(78,86, 96,108, 5,11, mat(0x5f4a34), doorPivot); // handle near free edge — drag this
 
-// ---- BED (left wall, headboard at back over radiator, runs forward under wall unit)
+// ---- SLÄKT BED (left wall, headboard at back over radiator, runs forward under wall unit)
+const slaktBed = new THREE.Group(); scene.add(slaktBed);
 const BX0=0, BX1=98, BZ0=RL-206, BZ1=RL;        // frame 98 wide, 206 long (head at back z=RL)
 const bedParts = [
-  box(BX0,BX1, 0,48, BZ0,BZ1-6, mat(0xbcc4d2)),              // base
-  box(BX0,BX1-2, 48,58, BZ0+2,BZ1-8, mat(0xf2f5f9)),        // mattress (top 58 = footboard height)
-  box(BX0,BX1, 0,80, BZ1-6,BZ1, mat(0x9aa6b6)),             // headboard (80 cm, against radiator)
-  box(BX0+8,BX1-10, 58,72, BZ1-30,BZ1-10, mat(0xfafbfc)),   // pillow
+  box(BX0,BX1, 0,48, BZ0,BZ1-6, mat(0xbcc4d2), slaktBed),              // base
+  box(BX0,BX1-2, 48,58, BZ0+2,BZ1-8, mat(0xf2f5f9), slaktBed),        // mattress (top 58 = footboard height)
+  box(BX0,BX1, 0,80, BZ1-6,BZ1, mat(0x9aa6b6), slaktBed),             // headboard (80 cm, against radiator)
+  box(BX0+8,BX1-10, 58,72, BZ1-30,BZ1-10, mat(0xfafbfc), slaktBed),   // pillow
 ];
 
 // ---- WALL UNIT (left wall, 162 long, 40 deep, 170..210 high)
@@ -247,7 +270,6 @@ const ubParts = [
 
 // ===================== DIMENSIONS (red 3D arrows) =====================
 const dimGroup = new THREE.Group(); scene.add(dimGroup);
-const dimLabels = [];
 const RED = 0xd23a30;
 const dimLineMat = new THREE.LineBasicMaterial({ color: RED });
 const extLineMat = new THREE.LineBasicMaterial({ color: 0xe79490 });
@@ -266,7 +288,20 @@ function dim3d(p0, p1, off, txt, parent=dimGroup){
   dimCone(a, a.clone().sub(b), parent); dimCone(b, b.clone().sub(a), parent);
   const mid = a.clone().add(b).multiplyScalar(0.5);
   const el = document.createElement('div'); el.className = 'lbl dim'; el.textContent = txt;
-  const o = new CSS2DObject(el); o.position.copy(mid); parent.add(o); dimLabels.push(o);
+  const o = new CSS2DObject(el); o.position.copy(mid); parent.add(o);
+  reg(o, 'dim', parent===slaktBed ? gSlakt : parent===underbed ? gUnderbed : gAlways);
+}
+// like dim3d but attaches to a given group and is NOT tracked by the Dims toggle (for rebuilt beds)
+function dimSimple(p0, p1, off, txt, parent){
+  const a = va([p0[0]+off[0], p0[1]+off[1], p0[2]+off[2]]);
+  const b = va([p1[0]+off[0], p1[1]+off[1], p1[2]+off[2]]);
+  parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([va(p0), a]), extLineMat));
+  parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([va(p1), b]), extLineMat));
+  parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), dimLineMat));
+  dimCone(a, a.clone().sub(b), parent); dimCone(b, b.clone().sub(a), parent);
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  const d = document.createElement('div'); d.className = 'lbl dim'; d.textContent = txt;
+  const o = new CSS2DObject(d); o.position.copy(mid); parent.add(o);
 }
 // room shell
 dim3d([0,0,0],[RW,0,0],[0,0,-28], "215 cm");                 // width  (front floor edge)
@@ -286,7 +321,7 @@ dim3d([RW,205,103],[RW,205,173],[14,0,0], "Side window 70");
 // sill height (right wall, window front edge)
 dim3d([RW,0,103],[RW,85,103],[12,0,0], "Sill 85");
 // bed + underbed widths + gap to opposite wall (chained across room width, in front of the bed)
-dim3d([0,0,96],[98,0,96],[0,0,-30], "Bed 98");
+dim3d([0,0,96],[98,0,96],[0,0,-30], "Bed 98", slaktBed);   // hides when bed is swapped
 dim3d([98,0,96],[193,0,96],[0,0,-30], "Underbed 95", underbed);   // shows only when underbed is out
 dim3d([193,0,96],[RW,0,96],[0,0,-30], "Gap 22", underbed);
 // WALL UNIT — full red dimensions on the unit itself
@@ -295,18 +330,55 @@ dim3d([0,210,110],[40,210,110],[0,18,0], "40 deep");        // depth into room
 dim3d([40,0,110],[40,170,110],[0,0,-34], "170");            // floor -> underside
 dim3d([40,170,110],[40,210,110],[0,0,-34], "40 tall");      // unit height
 
+// ===================== BUSUNGE (swappable extendable bed, 3 lengths) =====================
+const busunge = new THREE.Group(); busunge.visible = false; scene.add(busunge);
+const BUSUNGE_LENS = [138, 173, 208];   // shortened -> extended (cm); width 90, headboard 100
+let busungeSize = 0;
+let busungeParts = [];
+function clearGroup(g){
+  for (let i=g.children.length-1; i>=0; i--){
+    const c = g.children[i];
+    if (c.isCSS2DObject && c.element) c.element.remove();
+    g.remove(c);
+  }
+}
+function syncBusungeLabels(){
+  busunge.traverse(o => {
+    if (!o.isCSS2DObject) return;
+    const isDim = o.element.classList.contains('dim');
+    o.visible = busunge.visible && (isDim ? dimsOn : labelsOn);
+  });
+}
+function buildBusunge(){
+  clearGroup(busunge);
+  const L = BUSUNGE_LENS[busungeSize], W = 90, footZ = RL - L;
+  const frameW = mat(0xf1efe9), mattM = mat(0xf8fafc), panelM = mat(0xe9e6df);
+  busungeParts = [
+    box(0,W, 0,28, footZ, RL-6, frameW, busunge),       // base
+    box(2,W-2, 28,38, footZ+2, RL-8, mattM, busunge),   // mattress
+    box(0,W, 0,100, RL-6, RL, panelM, busunge),         // headboard (100 cm)
+    box(0,W, 0,55, footZ, footZ+6, panelM, busunge),    // footboard (55 cm)
+  ];
+  const d = document.createElement('div'); d.className = 'lbl';
+  d.innerHTML = 'BUSUNGE 80×' + L + ' &nbsp;<span style="color:#b23a36">tap to resize</span>';
+  const o = new CSS2DObject(d); o.position.set(W/2*M, 0.6, (footZ+12)*M); busunge.add(o);
+  dimSimple([W,5,footZ],[W,5,RL],[16,0,0], L + ' cm', busunge);   // length (extends with size)
+  syncBusungeLabels();
+}
+buildBusunge();
+
 // ===================== LABELS (CSS2D) =====================
-const labels = [];
-function label(text, x,y,z, cls='lbl'){
+function label(text, x,y,z, cls='lbl', gate){
   const el = document.createElement('div'); el.className = cls; el.textContent = text;
-  const o = new CSS2DObject(el); o.position.set(x*M,y*M,z*M); scene.add(o); labels.push(o); return o;
+  const o = new CSS2DObject(el); o.position.set(x*M,y*M,z*M); scene.add(o);
+  return reg(o, cls.indexOf('dim')>=0 ? 'dim' : 'name', gate || gAlways);
 }
 // furniture names only — dimensions are shown by the red dim arrows
-label('Bed  207 × 96', 48, 80, 200);
+const slaktNameLabel = label('Bed  206 × 98', 48, 80, 200, 'lbl', gSlakt);
 label('Wall unit', 20, 215, 191);
 label('Main window', 130, 150, RL);
 label('Side window', RW, 150, 138);
-const underbedLabel = label('Pull-out underbed', 135, 48, 196);
+const underbedLabel = label('Pull-out underbed', 135, 48, 196, 'lbl', gUnderbed);
 
 // ===================== UI =====================
 let wallsMode = 'auto';     // auto | glass | off
@@ -323,24 +395,38 @@ tWalls.onclick = () => {
   wallsMode = wallsMode==='auto' ? 'glass' : wallsMode==='glass' ? 'off' : 'auto';
   tWalls.textContent = 'Walls: ' + (wallsMode==='auto'?'Auto':wallsMode==='glass'?'Glass':'Off');
 };
-let labelsOn = true;
 const tLabels = document.getElementById('labels');
-tLabels.onclick = () => { labelsOn=!labelsOn; tLabels.textContent='Labels: '+(labelsOn?'on':'off');
-  labels.forEach(l=>l.element.style.display = labelsOn?'':'none'); };
+tLabels.onclick = () => { labelsOn=!labelsOn; tLabels.textContent='Labels: '+(labelsOn?'on':'off'); refreshLabels(); };
 
-let dimsOn = true;
 const tDims = document.getElementById('dims');
-tDims.onclick = () => { dimsOn=!dimsOn; tDims.textContent='Dims: '+(dimsOn?'on':'off');
-  dimGroup.visible = dimsOn; dimLabels.forEach(l=>l.element.style.display = dimsOn?'':'none'); };
+tDims.onclick = () => { dimsOn=!dimsOn; tDims.textContent='Dims: '+(dimsOn?'on':'off'); dimGroup.visible=dimsOn; refreshLabels(); };
 
-let underbedOut = true;
 const tUnder = document.getElementById('underbed');
 function setUnderbed(out){
-  underbedOut = out; underbed.visible = out;
+  underbedOut = out;
+  underbed.visible = out && bedKind === 'slakt';
   tUnder.textContent = 'Underbed: ' + (out ? 'out' : 'in');
-  underbedLabel.element.style.display = (out && labelsOn) ? '' : 'none';
+  refreshLabels();
 }
 tUnder.onclick = () => setUnderbed(!underbedOut);
+
+// swap SLÄKT <-> BUSUNGE (click the BUSUNGE bed to cycle its 3 lengths)
+const tBed = document.getElementById('bedkind');
+const slaktBedInfo = document.getElementById('slaktBedInfo');
+const busungeBedInfo = document.getElementById('busungeBedInfo');
+function setBed(kind){
+  bedKind = kind;
+  const isSlakt = kind === 'slakt';
+  slaktBed.visible = isSlakt;
+  underbed.visible = isSlakt && underbedOut;
+  busunge.visible = !isSlakt;
+  tBed.textContent = 'Bed: ' + (isSlakt ? 'SLÄKT' : 'BUSUNGE');
+  document.getElementById('bedName').textContent = isSlakt ? 'SLÄKT' : 'BUSUNGE (extendable)';
+  slaktBedInfo.style.display = isSlakt ? '' : 'none';
+  busungeBedInfo.style.display = isSlakt ? 'none' : '';
+  refreshLabels();
+}
+tBed.onclick = () => setBed(bedKind === 'slakt' ? 'busunge' : 'slakt');
 
 document.getElementById('reset').onclick = () => moveTo(ISO);
 document.getElementById('iso').onclick   = () => moveTo(ISO);
@@ -352,8 +438,9 @@ const infoPanel = document.getElementById('panel');
 document.getElementById('panelToggle').onclick = () => infoPanel.classList.toggle('collapsed');
 if (matchMedia('(max-width: 760px)').matches || matchMedia('(pointer: coarse)').matches) {
   infoPanel.classList.add('collapsed');                   // phones start collapsed (title only)
-  labelsOn = false; labels.forEach(l => l.element.style.display = 'none'); tLabels.textContent = 'Labels: off';
+  labelsOn = false; tLabels.textContent = 'Labels: off';
 }
+refreshLabels();   // set initial label visibility from state
 
 // per-frame wall handling (dollhouse auto-hide) — uses true world positions so it survives the mirror
 function updateWalls(){
@@ -409,8 +496,9 @@ window.addEventListener('pointermove', e => {
   }
   if (e.pointerType && e.pointerType !== 'mouse') return; // hover cursor is mouse-only (skip on touch)
   setRay(e);                                             // hover cursor hint
-  el.style.cursor = hits([doorLeaf, doorHandle]) ? 'grab'
-                  : (hits(bedParts) || (underbedOut && hits(ubParts))) ? 'pointer' : '';
+  const overBed = bedKind === 'busunge' ? hits(busungeParts)
+                : (hits(bedParts) || (underbedOut && hits(ubParts)));
+  el.style.cursor = hits([doorLeaf, doorHandle]) ? 'grab' : overBed ? 'pointer' : '';
 });
 window.addEventListener('pointerup', e => {
   if (dragDoor) { dragDoor = false; controls.enabled = true; return; }
@@ -418,8 +506,10 @@ window.addEventListener('pointerup', e => {
   downXY = null;
   if (moved) return;                                     // it was an orbit drag, not a click
   setRay(e);
-  if (underbedOut && hits(ubParts)) setUnderbed(false);  // click underbed -> stow
-  else if (hits(bedParts)) setUnderbed(true);            // click bed -> roll underbed out
+  if (bedKind === 'busunge') {
+    if (hits(busungeParts)) { busungeSize = (busungeSize + 1) % BUSUNGE_LENS.length; buildBusunge(); }  // cycle 3 lengths
+  } else if (underbedOut && hits(ubParts)) setUnderbed(false);   // click underbed -> stow
+  else if (hits(bedParts)) setUnderbed(true);                    // click bed -> roll underbed out
 });
 
 function animate(){
